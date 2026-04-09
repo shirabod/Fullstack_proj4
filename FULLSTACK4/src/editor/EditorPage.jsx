@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import SaveModal from '../components/modals/SaveModal';
 import LoadModal from '../components/modals/LoadModal';
 import SearchReplaceModal from '../components/modals/SearchReplaceModal';
@@ -9,13 +9,6 @@ import DocumentPanels from '../components/editor/DocumentPanels';
 import KeyboardSection from '../components/editor/KeyboardSection';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
-
-const normalizeSelectionRange = (selection) => {
-  if (!selection) return null;
-  const start = Math.min(selection.start, selection.end);
-  const end = Math.max(selection.start, selection.end);
-  return { start, end };
-};
 
 export default function EditorPage({ currentUser, onLogout }) {
   const WORKSPACE_KEY = `visual_editor_workspace_${currentUser}`;
@@ -49,8 +42,6 @@ export default function EditorPage({ currentUser, onLogout }) {
   const [applyStyleToAll, setApplyStyleToAll] = useState(false);
   const [virtualInputTarget, setVirtualInputTarget] = useState('editor');
   const [caretIndex, setCaretIndex] = useState(0);
-  const [selectionRange, setSelectionRange] = useState(null);
-  const [isSelecting, setIsSelecting] = useState(false);
 
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
@@ -59,22 +50,22 @@ export default function EditorPage({ currentUser, onLogout }) {
   const [docToSaveId, setDocToSaveId] = useState(null);
   const [isClosingDoc, setIsClosingDoc] = useState(false);
 
-  const isInitialMount = useRef(true);
-
   const activeDoc = openDocs.find((doc) => doc.id === activeDocId);
-  const normalizedSelection = normalizeSelectionRange(selectionRange);
-  const hasSelection = Boolean(normalizedSelection && normalizedSelection.end > normalizedSelection.start);
   const safeCaretIndex = activeDoc ? Math.min(caretIndex, activeDoc.content.length) : 0;
 
   const getFileIndex = () => storageService.loadData(INDEX_KEY) || [];
 
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    storageService.saveData(WORKSPACE_KEY, { docs: openDocs, activeId: activeDocId });
-  }, [openDocs, activeDocId, WORKSPACE_KEY]);
+  const persistWorkspace = (docs, activeId = activeDocId) => {
+    storageService.saveData(WORKSPACE_KEY, { docs, activeId });
+  };
+
+  const updateDocs = (updater, nextActiveId = activeDocId) => {
+    setOpenDocs((prev) => {
+      const nextDocs = updater(prev);
+      persistWorkspace(nextDocs, nextActiveId);
+      return nextDocs;
+    });
+  };
 
   const showMessage = (msg) => {
     setMessage(msg);
@@ -83,7 +74,7 @@ export default function EditorPage({ currentUser, onLogout }) {
 
   const updateActiveDocWithCaret = (updateFn) => {
     let nextCaret = safeCaretIndex;
-    setOpenDocs((prev) =>
+    updateDocs((prev) =>
       prev.map((doc) => {
         if (doc.id !== activeDocId) return doc;
         const result = updateFn(doc.content);
@@ -104,20 +95,6 @@ export default function EditorPage({ currentUser, onLogout }) {
       })
     );
     setCaretIndex(nextCaret);
-    setSelectionRange(null);
-  };
-
-  const applyStyleToSelection = (stylePatch) => {
-    if (!hasSelection) return false;
-    const { start, end } = normalizedSelection;
-    updateActiveDocWithCaret((content) => ({
-      content: content.map((el, index) => {
-        if (index < start || index >= end) return el;
-        return { ...el, ...stylePatch };
-      }),
-      caret: end
-    }));
-    return true;
   };
 
   const updateVirtualTargetValue = (transform) => {
@@ -145,7 +122,7 @@ export default function EditorPage({ currentUser, onLogout }) {
   const handleNewDoc = () => {
     const newId = generateId();
     const newCount = openDocs.length + 1;
-    setOpenDocs((prev) => [...prev, { id: newId, name: `מסמך חדש ${newCount}`, content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }]);
+    updateDocs((prev) => [...prev, { id: newId, name: `מסמך חדש ${newCount}`, content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }], newId);
     setActiveDocId(newId);
   };
 
@@ -153,10 +130,10 @@ export default function EditorPage({ currentUser, onLogout }) {
     const newDocs = openDocs.filter((doc) => doc.id !== idToClose);
     if (newDocs.length === 0) {
       const newId = generateId();
-      setOpenDocs([{ id: newId, name: 'מסמך חדש 1', content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }]);
+      updateDocs(() => [{ id: newId, name: 'מסמך חדש 1', content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }], newId);
       setActiveDocId(newId);
     } else {
-      setOpenDocs(newDocs);
+      updateDocs(() => newDocs, activeDocId === idToClose ? newDocs[newDocs.length - 1].id : activeDocId);
       if (activeDocId === idToClose) {
         setActiveDocId(newDocs[newDocs.length - 1].id);
       }
@@ -167,7 +144,7 @@ export default function EditorPage({ currentUser, onLogout }) {
     const doc = openDocs.find((d) => d.id === id);
     if (doc && !doc.isDraft) {
       storageService.saveData(getFileKey(doc.name), doc.content);
-      setOpenDocs((prev) => prev.map((d) => (d.id === id ? { ...d, isDirty: false } : d)));
+      updateDocs((prev) => prev.map((d) => (d.id === id ? { ...d, isDirty: false } : d)));
       showMessage(`"${doc.name}" נשמר בהצלחה!`);
     }
   };
@@ -231,7 +208,7 @@ export default function EditorPage({ currentUser, onLogout }) {
 
     storageService.saveData(getFileKey(name), docToUpdate.content);
 
-    setOpenDocs((prev) => prev.map((doc) => (doc.id === idToUpdate ? { ...doc, name, isDraft: false, isDirty: false } : doc)));
+    updateDocs((prev) => prev.map((doc) => (doc.id === idToUpdate ? { ...doc, name, isDraft: false, isDirty: false } : doc)));
     setShowSaveModal(false);
     setVirtualInputTarget('editor');
     showMessage(`נשמר בשם: ${name}`);
@@ -252,6 +229,7 @@ export default function EditorPage({ currentUser, onLogout }) {
     const alreadyOpen = openDocs.find((d) => !d.isDraft && d.name === name);
     if (alreadyOpen) {
       setActiveDocId(alreadyOpen.id);
+      persistWorkspace(openDocs, alreadyOpen.id);
       setShowLoadModal(false);
       showMessage('הקובץ כבר פתוח ופעיל כעת');
       return;
@@ -260,7 +238,7 @@ export default function EditorPage({ currentUser, onLogout }) {
     const data = storageService.loadData(getFileKey(name));
     if (data) {
       const newId = generateId();
-      setOpenDocs((prev) => [...prev, { id: newId, name, content: data, history: [data], historyIndex: 0, isDraft: false, isDirty: false }]);
+      updateDocs((prev) => [...prev, { id: newId, name, content: data, history: [data], historyIndex: 0, isDraft: false, isDirty: false }], newId);
       setActiveDocId(newId);
       setShowLoadModal(false);
       showMessage(`הקובץ "${name}" נטען!`);
@@ -277,10 +255,6 @@ export default function EditorPage({ currentUser, onLogout }) {
 
     updateActiveDocWithCaret((content) => {
       const newElement = { id: generateId(), char, ...currentStyle };
-      if (hasSelection) {
-        const { start, end } = normalizedSelection;
-        return { content: [...content.slice(0, start), newElement, ...content.slice(end)], caret: start + 1 };
-      }
       return { content: [...content.slice(0, safeCaretIndex), newElement, ...content.slice(safeCaretIndex)], caret: safeCaretIndex + 1 };
     });
   };
@@ -292,10 +266,6 @@ export default function EditorPage({ currentUser, onLogout }) {
     }
 
     updateActiveDocWithCaret((content) => {
-      if (hasSelection) {
-        const { start, end } = normalizedSelection;
-        return { content: [...content.slice(0, start), ...content.slice(end)], caret: start };
-      }
       if (safeCaretIndex === 0) {
         return { content, caret: 0 };
       }
@@ -320,11 +290,6 @@ export default function EditorPage({ currentUser, onLogout }) {
     }
 
     updateActiveDocWithCaret((content) => {
-      if (hasSelection) {
-        const { start, end } = normalizedSelection;
-        return { content: [...content.slice(0, start), ...content.slice(end)], caret: start };
-      }
-
       let i = safeCaretIndex - 1;
       while (i >= 0 && content[i].char === ' ') i--;
       while (i >= 0 && content[i].char !== ' ') i--;
@@ -336,13 +301,12 @@ export default function EditorPage({ currentUser, onLogout }) {
   const handleClear = () => updateActiveDocWithCaret(() => ({ content: [], caret: 0 }));
 
   const handleUndo = () => {
-    setOpenDocs((prev) =>
+    updateDocs((prev) =>
       prev.map((doc) => {
         if (doc.id === activeDocId && doc.historyIndex > 0) {
           const newIndex = doc.historyIndex - 1;
           const newContent = doc.history[newIndex];
           setCaretIndex(newContent.length);
-          setSelectionRange(null);
           return { ...doc, content: newContent, historyIndex: newIndex, isDirty: true };
         }
         return doc;
@@ -351,13 +315,12 @@ export default function EditorPage({ currentUser, onLogout }) {
   };
 
   const handleRedo = () => {
-    setOpenDocs((prev) =>
+    updateDocs((prev) =>
       prev.map((doc) => {
         if (doc.id === activeDocId && doc.historyIndex < doc.history.length - 1) {
           const newIndex = doc.historyIndex + 1;
           const newContent = doc.history[newIndex];
           setCaretIndex(newContent.length);
-          setSelectionRange(null);
           return { ...doc, content: newContent, historyIndex: newIndex, isDirty: true };
         }
         return doc;
@@ -368,7 +331,7 @@ export default function EditorPage({ currentUser, onLogout }) {
   const handleSearchOnly = () => {
     if (!searchTarget || !activeDoc) return;
     const docString = activeDoc.content.map((el) => el.char).join('');
-    const fromIndex = hasSelection ? normalizedSelection.end : safeCaretIndex;
+    const fromIndex = safeCaretIndex;
 
     let index = docString.indexOf(searchTarget, fromIndex);
     if (index === -1 && fromIndex > 0) index = docString.indexOf(searchTarget, 0);
@@ -378,7 +341,6 @@ export default function EditorPage({ currentUser, onLogout }) {
       return;
     }
 
-    setSelectionRange({ start: index, end: index + searchTarget.length });
     setCaretIndex(index + searchTarget.length);
     setActiveDocId(activeDoc.id);
     showMessage(`נמצאה תוצאה במיקום ${index + 1}`);
@@ -413,71 +375,14 @@ export default function EditorPage({ currentUser, onLogout }) {
   };
 
   const handleApplyStyleToAll = () => {
-    if (applyStyleToSelection(currentStyle)) {
-      showMessage('הסגנון הוחל על הטקסט המסומן');
-      return;
-    }
     updateActiveDocWithCaret((content) => ({ content: content.map((el) => ({ ...el, ...currentStyle })), caret: safeCaretIndex }));
     showMessage('הסגנון הוחל על כל הטקסט');
-  };
-
-  const isSelectedIndex = (index) => hasSelection && index >= normalizedSelection.start && index < normalizedSelection.end;
-
-  const getIndexFromNode = (node, container) => {
-    if (!node || !container) return null;
-    let current = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-    while (current && current !== container) {
-      if (current.dataset && current.dataset.charIndex !== undefined) {
-        const parsed = Number(current.dataset.charIndex);
-        return Number.isNaN(parsed) ? null : parsed;
-      }
-      current = current.parentElement;
-    }
-    return null;
-  };
-
-  const syncSelectionFromNative = (container) => {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-    const range = selection.getRangeAt(0);
-
-    if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return;
-    if (selection.isCollapsed) return;
-
-    const startIndex = getIndexFromNode(range.startContainer, container);
-    const endIndex = getIndexFromNode(range.endContainer, container);
-    if (startIndex === null || endIndex === null) return;
-
-    const start = Math.min(startIndex, endIndex);
-    const end = Math.max(startIndex, endIndex) + 1;
-    setSelectionRange({ start, end });
-    setCaretIndex(end);
-  };
-
-  const handleCharMouseDown = (e, index) => {
-    e.stopPropagation();
-    if (activeDocId === '') return;
-    setVirtualInputTarget('editor');
-    setIsSelecting(true);
-    setSelectionRange({ start: index, end: index + 1 });
-    setCaretIndex(index + 1);
-  };
-
-  const handleCharMouseEnter = (index) => {
-    if (!isSelecting) return;
-    setSelectionRange((prev) => (prev ? { start: prev.start, end: index + 1 } : { start: index, end: index + 1 }));
-    setCaretIndex(index + 1);
-  };
-
-  const handleEditorMouseUp = (e) => {
-    syncSelectionFromNative(e.currentTarget);
-    setIsSelecting(false);
   };
 
   const handleEditorClick = () => {
     if (!activeDoc) return;
     setVirtualInputTarget('editor');
-    if (!hasSelection) setCaretIndex(activeDoc.content.length);
+    setCaretIndex(activeDoc.content.length);
   };
 
   const handleGlobeClick = () => {
@@ -552,13 +457,9 @@ export default function EditorPage({ currentUser, onLogout }) {
         handleRedo={handleRedo}
         handleClear={handleClear}
         handleCloseDoc={handleCloseDoc}
-        handleEditorMouseUp={handleEditorMouseUp}
         handleEditorClick={handleEditorClick}
         caretIndex={safeCaretIndex}
-        hasSelection={hasSelection}
-        isSelectedIndex={isSelectedIndex}
-        handleCharMouseDown={handleCharMouseDown}
-        handleCharMouseEnter={handleCharMouseEnter}
+        currentLang={currentLang}
       />
 
       <KeyboardSection
@@ -572,7 +473,6 @@ export default function EditorPage({ currentUser, onLogout }) {
         PRESET_COLORS={PRESET_COLORS}
         currentStyle={currentStyle}
         setCurrentStyle={setCurrentStyle}
-        applyStyleToSelection={applyStyleToSelection}
         updateActiveDocWithCaret={updateActiveDocWithCaret}
         caretIndex={safeCaretIndex}
         setVirtualInputTarget={setVirtualInputTarget}

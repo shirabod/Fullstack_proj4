@@ -11,7 +11,6 @@ export default function KeyboardSection({
   PRESET_COLORS,
   currentStyle,
   setCurrentStyle,
-  applyStyleToSelection,
   updateActiveDocWithCaret,
   caretIndex,
   setVirtualInputTarget,
@@ -80,9 +79,6 @@ export default function KeyboardSection({
                 key={color}
                 onClick={() => {
                   setCurrentStyle((prev) => ({ ...prev, color }));
-                  if (applyStyleToSelection({ color })) {
-                    return;
-                  }
                   if (applyStyleToAll) {
                     updateActiveDocWithCaret((content) => ({
                       content: content.map((el) => ({ ...el, color })),
@@ -110,9 +106,6 @@ export default function KeyboardSection({
               const size = Number(e.target.value);
               if (Number.isNaN(size)) return;
               setCurrentStyle((prev) => ({ ...prev, fontSize: size }));
-              if (applyStyleToSelection({ fontSize: size })) {
-                return;
-              }
               if (applyStyleToAll) {
                 updateActiveDocWithCaret((content) => ({
                   content: content.map((el) => ({ ...el, fontSize: size })),
@@ -131,9 +124,6 @@ export default function KeyboardSection({
             onChange={(e) => {
               const font = e.target.value;
               setCurrentStyle((prev) => ({ ...prev, fontFamily: font }));
-              if (applyStyleToSelection({ fontFamily: font })) {
-                return;
-              }
               if (applyStyleToAll) {
                 updateActiveDocWithCaret((content) => ({
                   content: content.map((el) => ({ ...el, fontFamily: font })),

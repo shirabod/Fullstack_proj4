@@ -1,5 +1,42 @@
 import React from 'react';
 
+const buildRenderNodes = (content, showCaret, caretIndex) => {
+  const nodes = [];
+
+  const pushCaret = () => {
+    nodes.push({ type: 'caret', key: `caret-${nodes.length}` });
+  };
+
+  const pushChar = (el, index) => {
+    if (el.char === '\n') {
+      nodes.push({ type: 'newline', key: `nl-${el.id}-${index}` });
+      return;
+    }
+
+    nodes.push({
+      type: 'char',
+      key: `char-${el.id}-${index}`,
+      text: el.char,
+      color: el.color,
+      fontSize: el.fontSize,
+      fontFamily: el.fontFamily
+    });
+  };
+
+  for (let i = 0; i < content.length; i++) {
+    if (showCaret && caretIndex === i) {
+      pushCaret();
+    }
+    pushChar(content[i], i);
+  }
+
+  if (showCaret && caretIndex === content.length) {
+    pushCaret();
+  }
+
+  return nodes;
+};
+
 export default function DocumentPanels({
   openDocs,
   activeDocId,
@@ -8,18 +45,18 @@ export default function DocumentPanels({
   handleRedo,
   handleClear,
   handleCloseDoc,
-  handleEditorMouseUp,
   handleEditorClick,
   caretIndex,
-  hasSelection,
-  isSelectedIndex,
-  handleCharMouseDown,
-  handleCharMouseEnter
+  currentLang
 }) {
+  const baseDir = currentLang === 'HEB' ? 'rtl' : 'ltr';
+  const caretAnchorChar = baseDir === 'rtl' ? '\u200F' : '\u200E';
+
   return (
     <div className="flex-1 p-3 md:p-4 flex gap-4 overflow-x-auto bg-gray-100" dir="rtl">
       {openDocs.map((doc) => {
         const isActive = doc.id === activeDocId;
+        const renderNodes = buildRenderNodes(doc.content, isActive, caretIndex);
         return (
           <div
             key={doc.id}
@@ -61,37 +98,43 @@ export default function DocumentPanels({
 
             <div
               className={`flex-1 p-4 overflow-y-auto outline-none leading-tight ${isActive ? 'cursor-text' : 'cursor-pointer'}`}
-              dir="auto"
-              style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
-              onMouseUp={handleEditorMouseUp}
-              onMouseLeave={handleEditorMouseUp}
+              dir={baseDir}
+              style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', unicodeBidi: 'isolate', textAlign: 'start', direction: baseDir }}
               onClick={handleEditorClick}
             >
-              {doc.content.map((el, index) => (
-                <React.Fragment key={el.id}>
-                  {isActive && caretIndex === index && !hasSelection && (
-                    <span className="animate-pulse border-r-2 border-blue-500 ml-[1px] inline-block h-[1em] align-middle"></span>
-                  )}
+              {renderNodes.map((node) => {
+                if (node.type === 'caret') {
+                  return (
+                    <span
+                      key={node.key}
+                      className="animate-pulse inline-block h-[1em] align-middle"
+                      style={{ borderInlineEnd: '2px solid #3b82f6', marginInline: '1px' }}
+                    >
+                      {caretAnchorChar}
+                    </span>
+                  );
+                }
+
+                if (node.type === 'newline') {
+                  return <br key={node.key} />;
+                }
+
+                return (
                   <span
-                    data-char-index={index}
-                    onMouseDown={(e) => isActive && handleCharMouseDown(e, index)}
-                    onMouseEnter={() => isActive && handleCharMouseEnter(index)}
+                    key={node.key}
+                    dir="auto"
                     onClick={(e) => e.stopPropagation()}
                     style={{
-                      color: el.color,
-                      fontSize: `${el.fontSize}px`,
-                      fontFamily: el.fontFamily,
-                      backgroundColor: isActive && isSelectedIndex(index) ? '#BFDBFE' : 'transparent',
-                      borderRadius: isActive && isSelectedIndex(index) ? '3px' : '0px'
+                      color: node.color,
+                      fontSize: `${node.fontSize}px`,
+                      fontFamily: node.fontFamily,
+                      unicodeBidi: 'isolate'
                     }}
                   >
-                    {el.char}
+                    {node.text}
                   </span>
-                </React.Fragment>
-              ))}
-              {isActive && caretIndex === doc.content.length && !hasSelection && (
-                <span className="animate-pulse border-r-2 border-blue-500 ml-[2px] inline-block h-[1em] align-middle"></span>
-              )}
+                );
+              })}
               {!isActive && doc.content.length === 0 && (
                 <span className="text-gray-300 text-sm">לחץ כאן כדי להתחיל לכתוב...</span>
               )}
