@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import LoginScreen from './components/LoginScreen';
-import EditorPage from './editor/EditorPage';
+import EditorPage from './features/editor/EditorPage';
 
 // Main App component that toggles between Login and Editor
 export default function App() {

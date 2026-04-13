@@ -84,11 +84,11 @@ export default function KeyboardSection({
         {/* פונטים וגודל - בתחתית האזור */}
         <div className="flex flex-col gap-2">
           <label className="flex items-center justify-center gap-2 p-1.5 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-white transition-colors">
-            <input 
-              type="checkbox" 
-              checked={applyStyleToAll} 
-              onChange={(e) => setApplyStyleToAll(e.target.checked)} 
-              className="w-4 h-4 rounded border-slate-300 text-blue-600" 
+            <input
+              type="checkbox"
+              checked={applyStyleToAll}
+              onChange={(e) => setApplyStyleToAll(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-blue-600"
             />
             <span className="text-[10px] font-bold text-slate-600 uppercase">להכל</span>
           </label>
@@ -140,10 +140,12 @@ export default function KeyboardSection({
             {row.map((char) => (
               <button
                 key={char === 'caps' ? 'caps' : char}
-                onClick={() => char === 'caps' ? setIsCaps(!isCaps) : handleKeyPress(char)}
+                onClick={() => (char === 'caps' ? setIsCaps(!isCaps) : handleKeyPress(char))}
                 className={`flex-1 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center transition-all active:scale-95 active:shadow-inner ${
-                  char === 'caps' 
-                    ? (isCaps ? 'bg-blue-600 text-white border-blue-700 text-xs' : 'bg-slate-200 text-slate-700 text-xs') 
+                  char === 'caps'
+                    ? isCaps
+                      ? 'bg-blue-600 text-white border-blue-700 text-xs'
+                      : 'bg-slate-200 text-slate-700 text-xs'
                     : `bg-white text-slate-800 hover:border-blue-300 hover:text-blue-600 ${uniformBaseStyle}`
                 }`}
               >
@@ -204,7 +206,7 @@ export default function KeyboardSection({
               </button>
             ))}
           </div>
-          
+
           {/* פאנל אימוג'ים - פריסה ל-8 עמודות */}
           <div className="h-28 sm:h-32 grid grid-cols-8 gap-1 p-1.5 bg-orange-50/30 rounded-xl border border-orange-100 content-start overflow-y-auto custom-scrollbar">
             {Array.isArray(EMOJI_LAYOUT) && EMOJI_LAYOUT.slice(0, 32).map((emoji) => (

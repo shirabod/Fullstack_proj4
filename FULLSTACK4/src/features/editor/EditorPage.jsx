@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
-import SaveModal from '../components/modals/SaveModal';
-import LoadModal from '../components/modals/LoadModal';
-import SearchReplaceModal from '../components/modals/SearchReplaceModal';
+import { SaveModal, LoadModal, SearchReplaceModal } from './components/Modals';
 import storageService from './storage';
 import { LAYOUTS, SYMBOLS_LAYOUT, EMOJI_LAYOUT, PRESET_COLORS } from './constants';
-import TopToolbar from '../components/editor/TopToolbar';
-import DocumentPanels from '../components/editor/DocumentPanels';
-import KeyboardSection from '../components/editor/KeyboardSection';
+import TopToolbar from './components/TopToolbar';
+import DocumentPanels from './components/DocumentPanels';
+import KeyboardSection from './components/KeyboardSection';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export default function EditorPage({ currentUser, onLogout }) {
   const WORKSPACE_KEY = `visual_editor_workspace_${currentUser}`;
-  const INDEX_KEY = `visual_editor_file_index_${currentUser}`;
-  const getFileKey = (name) => `visual_editor_file_${currentUser}_${name}`;
+  const FILES_MAP_KEY = `visual_editor_files_${currentUser}`;
+
+  // Legacy (pre-map) storage keys (kept for migration/backward compatibility)
+  const LEGACY_INDEX_KEY = `visual_editor_file_index_${currentUser}`;
+  const legacyGetFileKey = (name) => `visual_editor_file_${currentUser}_${name}`;
 
   const [openDocs, setOpenDocs] = useState(() => {
     const workspace = storageService.loadData(WORKSPACE_KEY);
@@ -42,6 +43,7 @@ export default function EditorPage({ currentUser, onLogout }) {
   const [applyStyleToAll, setApplyStyleToAll] = useState(false);
   const [virtualInputTarget, setVirtualInputTarget] = useState('editor');
   const [caretIndex, setCaretIndex] = useState(0);
+  const [searchHighlight, setSearchHighlight] = useState(null);
 
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
@@ -53,7 +55,28 @@ export default function EditorPage({ currentUser, onLogout }) {
   const activeDoc = openDocs.find((doc) => doc.id === activeDocId);
   const safeCaretIndex = activeDoc ? Math.min(caretIndex, activeDoc.content.length) : 0;
 
-  const getFileIndex = () => storageService.loadData(INDEX_KEY) || [];
+  const loadFilesMap = () => {
+    const existingMap = storageService.loadData(FILES_MAP_KEY);
+    if (existingMap && typeof existingMap === 'object') return existingMap;
+
+    // Migrate from legacy index + per-file keys
+    const legacyIndex = storageService.loadData(LEGACY_INDEX_KEY) || [];
+    if (!Array.isArray(legacyIndex) || legacyIndex.length === 0) return {};
+
+    const migrated = {};
+    for (const name of legacyIndex) {
+      const content = storageService.loadData(legacyGetFileKey(name));
+      if (content) migrated[name] = content;
+    }
+    storageService.saveData(FILES_MAP_KEY, migrated);
+    return migrated;
+  };
+
+  const saveFilesMap = (nextMap) => {
+    storageService.saveData(FILES_MAP_KEY, nextMap);
+  };
+
+  const getFileIndex = () => Object.keys(loadFilesMap());
 
   const persistWorkspace = (docs, activeId = activeDocId) => {
     storageService.saveData(WORKSPACE_KEY, { docs, activeId });
@@ -95,6 +118,7 @@ export default function EditorPage({ currentUser, onLogout }) {
       })
     );
     setCaretIndex(nextCaret);
+    setSearchHighlight(null);
   };
 
   const updateVirtualTargetValue = (transform) => {
@@ -122,7 +146,10 @@ export default function EditorPage({ currentUser, onLogout }) {
   const handleNewDoc = () => {
     const newId = generateId();
     const newCount = openDocs.length + 1;
-    updateDocs((prev) => [...prev, { id: newId, name: `מסמך חדש ${newCount}`, content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }], newId);
+    updateDocs(
+      (prev) => [...prev, { id: newId, name: `מסמך חדש ${newCount}`, content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }],
+      newId
+    );
     setActiveDocId(newId);
   };
 
@@ -130,7 +157,10 @@ export default function EditorPage({ currentUser, onLogout }) {
     const newDocs = openDocs.filter((doc) => doc.id !== idToClose);
     if (newDocs.length === 0) {
       const newId = generateId();
-      updateDocs(() => [{ id: newId, name: 'מסמך חדש 1', content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }], newId);
+      updateDocs(
+        () => [{ id: newId, name: 'מסמך חדש 1', content: [], history: [[]], historyIndex: 0, isDraft: true, isDirty: false }],
+        newId
+      );
       setActiveDocId(newId);
     } else {
       updateDocs(() => newDocs, activeDocId === idToClose ? newDocs[newDocs.length - 1].id : activeDocId);
@@ -143,7 +173,9 @@ export default function EditorPage({ currentUser, onLogout }) {
   const saveSpecificDoc = (id) => {
     const doc = openDocs.find((d) => d.id === id);
     if (doc && !doc.isDraft) {
-      storageService.saveData(getFileKey(doc.name), doc.content);
+      const filesMap = loadFilesMap();
+      filesMap[doc.name] = doc.content;
+      saveFilesMap(filesMap);
       updateDocs((prev) => prev.map((d) => (d.id === id ? { ...d, isDirty: false } : d)));
       showMessage(`"${doc.name}" נשמר בהצלחה!`);
     }
@@ -201,12 +233,9 @@ export default function EditorPage({ currentUser, onLogout }) {
     const docToUpdate = openDocs.find((d) => d.id === idToUpdate);
     if (!docToUpdate) return;
 
-    const currentIndex = getFileIndex();
-    if (!currentIndex.includes(name)) {
-      storageService.saveData(INDEX_KEY, [...currentIndex, name]);
-    }
-
-    storageService.saveData(getFileKey(name), docToUpdate.content);
+    const filesMap = loadFilesMap();
+    filesMap[name] = docToUpdate.content;
+    saveFilesMap(filesMap);
 
     updateDocs((prev) => prev.map((doc) => (doc.id === idToUpdate ? { ...doc, name, isDraft: false, isDirty: false } : doc)));
     setShowSaveModal(false);
@@ -235,10 +264,24 @@ export default function EditorPage({ currentUser, onLogout }) {
       return;
     }
 
-    const data = storageService.loadData(getFileKey(name));
+    const filesMap = loadFilesMap();
+    let data = filesMap[name];
+
+    // Backward-compatible fallback to legacy per-file key
+    if (!data) {
+      const legacyData = storageService.loadData(legacyGetFileKey(name));
+      if (legacyData) {
+        data = legacyData;
+        filesMap[name] = legacyData;
+        saveFilesMap(filesMap);
+      }
+    }
     if (data) {
       const newId = generateId();
-      updateDocs((prev) => [...prev, { id: newId, name, content: data, history: [data], historyIndex: 0, isDraft: false, isDirty: false }], newId);
+      updateDocs(
+        (prev) => [...prev, { id: newId, name, content: data, history: [data], historyIndex: 0, isDraft: false, isDirty: false }],
+        newId
+      );
       setActiveDocId(newId);
       setShowLoadModal(false);
       showMessage(`הקובץ "${name}" נטען!`);
@@ -255,7 +298,7 @@ export default function EditorPage({ currentUser, onLogout }) {
 
     updateActiveDocWithCaret((content) => {
       const newElement = { id: generateId(), char, ...currentStyle };
-      return { content: [...content.slice(0, safeCaretIndex), newElement, ...content.slice(safeCaretIndex)], caret: safeCaretIndex + 1 };
+      return { content: [...content, newElement], caret: content.length + 1 };
     });
   };
 
@@ -266,10 +309,10 @@ export default function EditorPage({ currentUser, onLogout }) {
     }
 
     updateActiveDocWithCaret((content) => {
-      if (safeCaretIndex === 0) {
+      if (content.length === 0) {
         return { content, caret: 0 };
       }
-      return { content: [...content.slice(0, safeCaretIndex - 1), ...content.slice(safeCaretIndex)], caret: safeCaretIndex - 1 };
+      return { content: content.slice(0, -1), caret: content.length - 1 };
     });
   };
 
@@ -290,11 +333,18 @@ export default function EditorPage({ currentUser, onLogout }) {
     }
 
     updateActiveDocWithCaret((content) => {
-      let i = safeCaretIndex - 1;
+      if (content.length === 0) return { content, caret: 0 };
+      let i = content.length - 1;
+      // Skip trailing spaces, but stop at newline
       while (i >= 0 && content[i].char === ' ') i--;
-      while (i >= 0 && content[i].char !== ' ') i--;
-      const newCaret = i + 1;
-      return { content: [...content.slice(0, newCaret), ...content.slice(safeCaretIndex)], caret: newCaret };
+      // If we hit a newline, don't delete across it
+      if (i >= 0 && content[i].char === '\n') {
+        return { content, caret: content.length };
+      }
+      // Delete the word (stop at space or newline)
+      while (i >= 0 && content[i].char !== ' ' && content[i].char !== '\n') i--;
+      const newCaret = Math.max(0, i + 1);
+      return { content: content.slice(0, newCaret), caret: newCaret };
     });
   };
 
@@ -338,16 +388,20 @@ export default function EditorPage({ currentUser, onLogout }) {
 
     if (index === -1) {
       showMessage('לא נמצאו תוצאות לחיפוש');
+      setSearchHighlight(null);
       return;
     }
 
     setCaretIndex(index + searchTarget.length);
     setActiveDocId(activeDoc.id);
+    setSearchHighlight({ docId: activeDoc.id, start: index, end: index + searchTarget.length });
     showMessage(`נמצאה תוצאה במיקום ${index + 1}`);
   };
 
   const handleSearchReplace = () => {
     if (!searchTarget) return;
+
+    setSearchHighlight(null);
 
     updateActiveDocWithCaret((content) => {
       let newContent = [...content];
@@ -375,7 +429,7 @@ export default function EditorPage({ currentUser, onLogout }) {
   };
 
   const handleApplyStyleToAll = () => {
-    updateActiveDocWithCaret((content) => ({ content: content.map((el) => ({ ...el, ...currentStyle })), caret: safeCaretIndex }));
+    updateActiveDocWithCaret((content) => ({ content: content.map((el) => ({ ...el, ...currentStyle })), caret: content.length }));
     showMessage('הסגנון הוחל על כל הטקסט');
   };
 
@@ -383,6 +437,7 @@ export default function EditorPage({ currentUser, onLogout }) {
     if (!activeDoc) return;
     setVirtualInputTarget('editor');
     setCaretIndex(activeDoc.content.length);
+    setSearchHighlight(null);
   };
 
   const handleGlobeClick = () => {
@@ -423,13 +478,20 @@ export default function EditorPage({ currentUser, onLogout }) {
         searchTarget={searchTarget}
         replaceWith={replaceWith}
         virtualInputTarget={virtualInputTarget}
-        onSearchChange={setSearchTarget}
-        onReplaceChange={setReplaceWith}
+        onSearchChange={(next) => {
+          setSearchTarget(next);
+          setSearchHighlight(null);
+        }}
+        onReplaceChange={(next) => {
+          setReplaceWith(next);
+          setSearchHighlight(null);
+        }}
         onFocusSearch={() => setVirtualInputTarget('search')}
         onFocusReplace={() => setVirtualInputTarget('replace')}
         onClose={() => {
           setShowAdvancedEdit(false);
           setVirtualInputTarget('editor');
+          setSearchHighlight(null);
         }}
         onSearchOnly={handleSearchOnly}
         onReplaceAll={() => {
@@ -458,8 +520,9 @@ export default function EditorPage({ currentUser, onLogout }) {
         handleClear={handleClear}
         handleCloseDoc={handleCloseDoc}
         handleEditorClick={handleEditorClick}
-        caretIndex={safeCaretIndex}
+        caretIndex={activeDoc ? activeDoc.content.length : 0}
         currentLang={currentLang}
+        highlightRange={searchHighlight}
       />
 
       <KeyboardSection

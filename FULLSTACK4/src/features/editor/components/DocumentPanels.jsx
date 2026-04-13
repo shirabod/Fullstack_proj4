@@ -1,10 +1,14 @@
 import React from 'react';
 
-const buildRenderNodes = (content, showCaret, caretIndex) => {
+const buildRenderNodes = (content, showCaret, caretIndex, currentLang) => {
   const nodes = [];
 
   const pushCaret = () => {
-    nodes.push({ type: 'caret', key: `caret-${nodes.length}` });
+    // If caret is at start of a new line in Hebrew mode, add RTL mark first
+    if (currentLang === 'HEB' && caretIndex > 0 && content[caretIndex - 1].char === '\n') {
+      nodes.push({ type: 'dirmark', key: `dirmark-${caretIndex}`, mark: '\u200F' });
+    }
+    nodes.push({ type: 'caret', key: `caret-pos-${caretIndex}` });
   };
 
   const pushChar = (el, index) => {
@@ -16,6 +20,7 @@ const buildRenderNodes = (content, showCaret, caretIndex) => {
     nodes.push({
       type: 'char',
       key: `char-${el.id}-${index}`,
+      index,
       text: el.char,
       color: el.color,
       fontSize: el.fontSize,
@@ -47,16 +52,22 @@ export default function DocumentPanels({
   handleCloseDoc,
   handleEditorClick,
   caretIndex,
-  currentLang
+  currentLang,
+  highlightRange
 }) {
-  const baseDir = currentLang === 'HEB' ? 'rtl' : 'ltr';
-  const caretAnchorChar = baseDir === 'rtl' ? '\u200F' : '\u200E';
 
   return (
-    <div className="flex-1 p-3 md:p-4 flex gap-4 overflow-x-auto bg-gray-100" dir="rtl">
+    <div className="flex-1 p-3 md:p-4 flex gap-4 overflow-x-auto bg-gray-100" dir="ltr">
       {openDocs.map((doc) => {
         const isActive = doc.id === activeDocId;
-        const renderNodes = buildRenderNodes(doc.content, isActive, caretIndex);
+        const renderNodes = buildRenderNodes(doc.content, isActive, caretIndex, currentLang);
+        const defaultDir = currentLang === 'HEB' ? 'rtl' : 'ltr';
+        const caretMark = defaultDir === 'rtl' ? '\u200F' : '\u200E';
+        const editorDir = doc.content.length === 0 ? defaultDir : 'auto';
+        const activeHighlight =
+          highlightRange && highlightRange.docId === doc.id
+            ? { start: highlightRange.start, end: highlightRange.end }
+            : null;
         return (
           <div
             key={doc.id}
@@ -98,19 +109,36 @@ export default function DocumentPanels({
 
             <div
               className={`flex-1 p-4 overflow-y-auto outline-none leading-tight ${isActive ? 'cursor-text' : 'cursor-pointer'}`}
-              dir={baseDir}
-              style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', unicodeBidi: 'isolate', textAlign: 'start', direction: baseDir }}
+              dir={editorDir}
+              style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', unicodeBidi: 'plaintext', textAlign: 'start' }}
               onClick={handleEditorClick}
             >
               {renderNodes.map((node) => {
+                if (node.type === 'dirmark') {
+                  return (
+                    <span
+                      key={node.key}
+                      style={{ fontSize: '0px' }}
+                    >
+                      {node.mark}
+                    </span>
+                  );
+                }
+
                 if (node.type === 'caret') {
                   return (
                     <span
                       key={node.key}
-                      className="animate-pulse inline-block h-[1em] align-middle"
-                      style={{ borderInlineEnd: '2px solid #3b82f6', marginInline: '1px' }}
+                      className="animate-pulse"
+                      style={{
+                        borderInlineStart: '2px solid #3b82f6',
+                        display: 'inline-block',
+                        width: '0px',
+                        height: '1em',
+                        direction: defaultDir
+                      }}
                     >
-                      {caretAnchorChar}
+                      {caretMark}
                     </span>
                   );
                 }
@@ -122,13 +150,20 @@ export default function DocumentPanels({
                 return (
                   <span
                     key={node.key}
-                    dir="auto"
                     onClick={(e) => e.stopPropagation()}
+                    className={
+                      node.type === 'char' &&
+                      activeHighlight &&
+                      typeof node.index === 'number' &&
+                      node.index >= activeHighlight.start &&
+                      node.index < activeHighlight.end
+                        ? 'bg-yellow-200'
+                        : undefined
+                    }
                     style={{
                       color: node.color,
                       fontSize: `${node.fontSize}px`,
-                      fontFamily: node.fontFamily,
-                      unicodeBidi: 'isolate'
+                      fontFamily: node.fontFamily
                     }}
                   >
                     {node.text}
