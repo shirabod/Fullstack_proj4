@@ -1,49 +1,55 @@
-Study Flow – Smart Study Planner (Full-Stack Simulation)
-👥 Collaboration & Authorship
-This project was developed in full, equal collaboration by [Your Name] and Shira Alkobi. Throughout the development process, we worked closely on every module. We frequently utilized Pair Programming techniques, often developing and debugging from a single workstation to ensure architectural consistency and shared logic. Whether the code was pushed from one GitHub account or the other, every feature reflects our combined effort and mutual problem-solving.
+Multi-Document Visual Editor 📝
+A sophisticated, React-based text editor that allows users to manage multiple documents simultaneously through an interactive UI. Featuring a custom virtual keyboard, rich text styling, and persistent local storage.
+
+👥 Collaboration & Development
+Important Note: This project is the result of a full and equal collaboration between the team members. While the commit history or local environment might appear as though the work was conducted from a single machine, the entire development process followed the Pair Programming methodology.
+
+Every line of code, architectural decision, and bug fix was brainstormed and implemented together. This project reflects a balanced team effort where both partners were actively involved in every stage of development.
 
 🚀 Key Features
-Complete CRUD Operations: Create, Read, Update, and Delete study tasks.
+Multi-Document Management: Open, close, and switch between multiple documents seamlessly in a dynamic workspace.
 
-Advanced Filtering & Search: Real-time search by title or subject and filtering by priority levels.
+Smart Virtual Keyboard: Full support for Hebrew and English layouts, including Caps Lock functionality, special symbols, and emojis.
 
-Dynamic Dashboard: Live statistics (Total/Pending/Completed) and an urgent tasks panel to keep students on track.
+Rich Text Styling: Comprehensive control over font families, text sizes, and colors. Styles can be applied to specific selections or the entire document.
 
-Interactive Calendar View: A visual deadline tracker with color-coded task indicators.
+Advanced Search & Replace: Powerful engine to find text within documents with real-time highlighting and "Replace All" capabilities.
 
-User Authentication: Secure registration and login system.
+Data Persistence: User-specific login system with the ability to save and restore files using the LocalStorage API. Includes "Unsaved Changes" alerts to prevent data loss.
 
-Session Persistence: Implementation of cookie-based sessions to keep users logged in across refreshes.
+Action History: Robust Undo/Redo functionality maintained individually for each open document.
 
-🛠️ Technical Architecture
-This project demonstrates a deep understanding of full-stack systems by simulating an entire enterprise ecosystem within the browser:
+🛠 Tech Stack
+Frontend: React 19 (Hooks, Functional Components)
 
-Frontend Layer: A Single Page Application (SPA) architecture built with vanilla JavaScript (ES6+), HTML5, and CSS3, using a template-based navigation system.
+Styling: Tailwind CSS (Responsive Design)
 
-Network Layer (FAJAX): A custom-built simulation of the XMLHttpRequest object (FAJAX) that introduces:
+Build Tool: Vite
 
-Simulated Latency: Random delays (1-3s) to mimic real-world server response times.
+Storage: LocalStorage API with a dedicated custom Storage Service.
 
-Packet Loss: A configurable "drop rate" to test how the frontend handles network failures.
+💻 Getting Started
+Clone the repository:
 
-Backend Layer: Simulated Node.js-style servers (AuthServer and TasksServer) that handle routing, data validation, and logic.
+Bash
+git clone [repository-url]
+Navigate to the project directory:
 
-Database Layer: A simulated relational database managed via LocalStorage, featuring specialized controllers for users and tasks.
+Bash
+cd FULLSTACK4
+Install dependencies:
 
-💻 Technologies Used
-Language: JavaScript (ES6+)
+Bash
+npm install
+Run the development server:
 
-Styling: CSS3 (Custom properties, Flexbox, Grid)
+Bash
+npm run dev
+🏗 Project Structure
+src/features/editor/: Core editor logic and state management.
 
-Storage: LocalStorage API & Cookie Management
+src/components/: Reusable UI components such as Login screens and Modals.
 
-Architecture: Modular MVC (Model-View-Controller) design.
+src/features/editor/storage.js: Service layer for browser-based data persistence.
 
-🧠 Core Competencies Demonstrated
-Asynchronous Flow: Managing complex data lifecycles using Promises and Async/Await.
-
-Full-Stack Data Flow: Implementing the complete journey of a request from UI input to database persistence.
-
-Resilient Programming: Designing frontend logic that gracefully handles simulated network errors and timeouts.
-
-Collaboration: Demonstrating the ability to work in a synchronized team environment using Git.
+src/features/editor/constants.js: Configuration for keyboard layouts, fonts, and theme colors.
